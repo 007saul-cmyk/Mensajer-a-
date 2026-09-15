@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mensajería en Tiempo Real</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    /* Prevenir scroll no deseado en dispositivos móviles */
+    body {
+      height: 100dvh;
+      overflow: hidden;
+    }
+    ::-webkit-scrollbar {
+      width: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 2px;
+    }
+    @keyframes pulse-rec {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .rec-active {
+      animation: pulse-rec 1s infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans flex flex-col h-full">
+
+  <!-- MODAL DE INGRESO (SALA Y USUARIO) -->
+  <div id="login-modal" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
+      <div class="text-center">
+        <div class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-500/30">
+          <i class="fa-solid fa-comments text-2xl text-white"></i>
+        </div>
+        <h2 class="text-xl font-bold text-slate-100">Iniciar Chat</h2>
+        <p class="text-xs text-slate-400 mt-1">Ingresa tu nombre y el código de sala para conectar celular a celular</p>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs text-slate-400 font-medium block mb-1">Tu Nombre / Nickname</label>
+          <input type="text" id="username-input" placeholder="Ej: Carlos" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+        </div>
+        <div>
+          <label class="text-xs text-slate-400 font-medium block mb-1">Código de Sala (Room)</label>
+          <input type="text" id="room-input" placeholder="Ej: sala123" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500">
+        </div>
+      </div>
+
+      <button onclick="joinRoom()" class="w-full bg-blue-600 hover:bg-blue-500 font-semibold text-white py-3 rounded-xl transition-all shadow-md shadow-blue-600/30">
+        Entrar al Chat
+      </button>
+    </div>
+  </div>
+
+  <!-- HEADER -->
+  <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center font-bold text-white shadow-md shadow-blue-500/20">
+        <i class="fa-solid fa-user text-sm"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-slate-100 text-sm leading-tight" id="display-room">Sin Conexión</h1>
+        <p class="text-[11px] text-emerald-400 flex items-center gap-1" id="display-user">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Desconectado
+        </p>
+      </div>
+    </div>
+    <button onclick="leaveRoom()" class="text-xs text-slate-400 hover:text-red-400 px-2 py-1 rounded-lg border border-slate-800">
+      <i class="fa-solid fa-right-from-bracket mr-1"></i> Salir
+    </button>
+  </header>
+
+  <!-- ÁREA DE MENSAJES -->
+  <main class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950" id="messages-container">
+    <!-- Los mensajes dinámicos aparecerán aquí -->
+  </main>
+
+  <!-- PREVISUALIZADOR DE ARCHIVOS -->
+  <div id="media-preview" class="hidden px-4 py-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
+    <div class="flex items-center gap-3" id="preview-content"></div>
+    <button onclick="clearPreview()" class="text-slate-400 hover:text-red-400 text-sm p-1">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+  </div>
+
+  <!-- BARRA DE GRABACIÓN DE VOZ -->
+  <div id="recording-bar" class="hidden px-4 py-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="w-3 h-3 rounded-full bg-red-500 rec-active"></span>
+      <span id="recording-timer" class="text-sm font-mono text-red-400 font-bold">00:00</span>
+      <span class="text-xs text-slate-400">Grabando audio...</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="cancelRecording()" class="px-3 py-1.5 text-xs text-slate-400 hover:text-red-400">Cancelar</button>
+      <button onclick="stopAndSendRecording()" class="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center">
+        <i class="fa-solid fa-paper-plane text-xs"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- INPUT PRINCIPAL -->
+  <footer id="input-bar" class="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2 shrink-0">
+    <input type="file" id="file-input" class="hidden" accept="image/*,video/*,audio/*" onchange="handleFileSelect(event)">
+    <button onclick="document.getElementById('file-input').click()" class="p-2.5 text-slate-400 hover:text-blue-400 rounded-full">
+      <i class="fa-solid fa-paperclip text-lg"></i>
+    </button>
+
+    <input type="text" id="message-input" placeholder="Escribe un mensaje..." class="flex-1 bg-slate-800 text-slate-100 placeholder-slate-500 text-sm py-2.5 px-4 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 border border-slate-700/50" onkeypress="handleKeyPress(event)">
+
+    <button id="mic-btn" onclick="startRecording()" class="p-2.5 text-slate-400 hover:text-blue-400 rounded-full">
+      <i class="fa-solid fa-microphone text-lg"></i>
+    </button>
+
+    <button onclick="sendChatMessage()" class="p-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl shadow-md shadow-blue-600/30">
+      <i class="fa-solid fa-paper-plane text-sm"></i>
+    </button>
+  </footer>
+
+  <script>
+    // CAMBIA ESTA URL POR LA IP O DOMINIO DE TU SERVIDOR EN LA NUBE (ej. Render, Railway)
+    const SERVER_URL = "https://mensajer-a.onrender.com"; 
+    
+    let socket;
+    let currentUser = "";
+    let currentRoom = "";
+    let selectedFile = null;
+    let selectedFileType = null;
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let recordingTimer = null;
+    let secondsRecorded = 0;
+
+    function joinRoom() {
+      const user = document.getElementById('username-input').value.trim();
+      const room = document.getElementById('room-input').value.trim();
+
+      if (!user || !room) {
+        alert("Ingresa un usuario y un código de sala.");
+        return;
+      }
+
+      currentUser = user;
+      currentRoom = room;
+
+      // Conexión Socket.io
+      socket = io(SERVER_URL);
+
+      socket.on('connect', () => {
+        socket.emit('joinRoom', { username: currentUser, room: currentRoom });
+        document.getElementById('login-modal').classList.add('hidden');
+        document.getElementById('display-room').innerText = `Sala: ${currentRoom}`;
+        document.getElementById('display-user').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ${currentUser}`;
+      });
+
+      // Recibir Mensajes en tiempo real
+      socket.on('message', (data) => {
+        appendMessage(data);
+      });
+    }
+
+    function leaveRoom() {
+      if (socket) socket.disconnect();
+      document.getElementById('login-modal').classList.remove('hidden');
+      document.getElementById('messages-container').innerHTML = '';
+    }
+
+    function handleKeyPress(e) {
+      if (e.key === 'Enter') sendChatMessage();
+    }
+
+    function handleFileSelect(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        selectedFile = evt.target.result; // Convierte a Base64
+        if (file.type.startsWith('image/')) selectedFileType = 'image';
+        else if (file.type.startsWith('video/')) selectedFileType = 'video';
+        else if (file.type.startsWith('audio/')) selectedFileType = 'audio';
+
+        document.getElementById('media-preview').classList.remove('hidden');
+        document.getElementById('preview-content').innerHTML = `
+          <i class="fa-solid fa-file text-blue-400"></i>
+          <span class="text-xs text-slate-300 truncate max-w-[200px]">${file.name}</span>
+        `;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearPreview() {
+      selectedFile = null;
+      selectedFileType = null;
+      document.getElementById('file-input').value = '';
+      document.getElementById('media-preview').classList.add('hidden');
+    }
+
+    function sendChatMessage() {
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+
+      if (!text && !selectedFile) return;
+
+      const messageData = {
+        sender: currentUser,
+        room: currentRoom,
+        text: text,
+        media: selectedFile,
+        mediaType: selectedFileType,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      socket.emit('chatMessage', messageData);
+      input.value = '';
+      clearPreview();
+    }
+
+    function appendMessage(data) {
+      const container = document.getElementById('messages-container');
+      const isSelf = data.sender === currentUser;
+
+      const wrapper = document.createElement('div');
+      wrapper.className = `flex flex-col ${isSelf ? 'items-end ml-auto' : 'items-start'} max-w-[85%] sm:max-w-[70%]`;
+
+      let mediaHTML = '';
+      if (data.media) {
+        if (data.mediaType === 'image') mediaHTML = `<img src="${data.media}" class="rounded-lg mb-2 max-h-60 object-cover w-full">`;
+        else if (data.mediaType === 'video') mediaHTML = `<video src="${data.media}" controls class="rounded-lg mb-2 max-h-60 w-full"></video>`;
+        else if (data.mediaType === 'audio') mediaHTML = `<audio src="${data.media}" controls class="mb-2 w-full"></audio>`;
+      }
+
+      const bubbleColor = isSelf ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-100 border border-slate-700/50';
+
+      wrapper.innerHTML = `
+        <span class="text-[10px] text-slate-400 mb-1 px-1">${data.sender}</span>
+        <div class="${bubbleColor} p-3 rounded-2xl ${isSelf ? 'rounded-tr-none' : 'rounded-tl-none'} shadow-md">
+          ${mediaHTML}
+          ${data.text ? `<p class="text-sm">${data.text}</p>` : ''}
+        </div>
+        <span class="text-[10px] text-slate-500 mt-1 px-1">${data.time}</span>
+      `;
+
+      container.appendChild(wrapper);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // GRABACIÓN DE NOTAS DE VOZ
+    async function startRecording() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+        mediaRecorder.start();
+
+        document.getElementById('input-bar').classList.add('hidden');
+        document.getElementById('recording-bar').classList.remove('hidden');
+
+        secondsRecorded = 0;
+        recordingTimer = setInterval(() => {
+          secondsRecorded++;
+          const mins = String(Math.floor(secondsRecorded / 60)).padStart(2, '0');
+          const secs = String(secondsRecorded % 60).padStart(2, '0');
+          document.getElementById('recording-timer').innerText = `${mins}:${secs}`;
+        }, 1000);
+      } catch (err) {
+        alert("Permiso de micrófono denegado.");
+      }
+    }
+
+    function cancelRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      clearInterval(recordingTimer);
+      document.getElementById('recording-bar').classList.add('hidden');
+      document.getElementById('input-bar').classList.remove('hidden');
+    }
+
+    function stopAndSendRecording() {
+      if (!mediaRecorder) return;
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          socket.emit('chatMessage', {
+            sender: currentUser,
+            room: currentRoom,
+            text: '',
+            media: reader.result,
+            mediaType: 'audio',
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          });
+        };
+      };
+      mediaRecorder.stop();
+      clearInterval(recordingTimer);
+      document.getElementById('recording-bar').classList.add('hidden');
+      document.getElementById('input-bar').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>

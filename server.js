@@ -12,28 +12,48 @@ const io = new Server(server, {
     origin: "*",
     methods: ["GET", "POST"]
   },
-  maxHttpBufferSize: 1e7 // Límite para subir imágenes/audios (10MB)
+  maxHttpBufferSize: 1e7 // 10MB para audios/imágenes
 });
+
+// Guardar usuarios activos por sala
+const usersInRooms = {};
 
 io.on('connection', (socket) => {
   
-  // Unirse a una sala específica
   socket.on('joinRoom', ({ username, room }) => {
     socket.join(room);
-    console.log(`${username} se unió a la sala: ${room}`);
+    socket.username = username;
+    socket.room = room;
+
+    if (!usersInRooms[room]) {
+      usersInRooms[room] = [];
+    }
+    
+    // Agregar usuario si no está en la lista
+    if (!usersInRooms[room].includes(username)) {
+      usersInRooms[room].push(username);
+    }
+
+    console.log(`${username} se unió a ${room}`);
+
+    // Avisar a todos los miembros de la sala sobre la nueva lista de usuarios
+    io.to(room).emit('roomUsers', usersInRooms[room]);
   });
 
-  // Reenviar mensaje en tiempo real a todos en la misma sala
   socket.on('chatMessage', (data) => {
     io.to(data.room).emit('message', data);
   });
 
   socket.on('disconnect', () => {
-    console.log('Usuario desconectado');
+    const { username, room } = socket;
+    if (room && usersInRooms[room]) {
+      usersInRooms[room] = usersInRooms[room].filter(u => u !== username);
+      io.to(room).emit('roomUsers', usersInRooms[room]);
+    }
   });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => {
   console.log(`Servidor activo en el puerto ${PORT}`);
 });

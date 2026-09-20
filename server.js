@@ -1,21 +1,13 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const cors = require('cors');
 
 const app = express();
-app.use(cors());
-
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  },
-  maxHttpBufferSize: 1e7 // 10MB para audios/imágenes
+  cors: { origin: "*" }
 });
 
-// Guardar usuarios activos por sala
 const usersInRooms = {};
 
 io.on('connection', (socket) => {
@@ -29,31 +21,40 @@ io.on('connection', (socket) => {
       usersInRooms[room] = [];
     }
     
-    // Agregar usuario si no está en la lista
-    if (!usersInRooms[room].includes(username)) {
-      usersInRooms[room].push(username);
-    }
+    usersInRooms[room].push({ id: socket.id, username });
 
-    console.log(`${username} se unió a ${room}`);
-
-    // Avisar a todos los miembros de la sala sobre la nueva lista de usuarios
-    io.to(room).emit('roomUsers', usersInRooms[room]);
+    // Notifica a la sala el refresco de usuarios
+    io.to(room).emit('roomUsers', {
+      users: usersInRooms[room]
+    });
   });
 
   socket.on('chatMessage', (data) => {
-    io.to(data.room).emit('message', data);
+    // Si data.targets tiene IDs, redirigir solo a esos destinatarios + al emisor
+    if (data.targets && data.targets.length > 0) {
+      // Enviar al emisor para visualizarlo en su propia pantalla
+      socket.emit('message', data);
+
+      // Enviar de forma aislada a los destinatarios especificados
+      data.targets.forEach(targetSocketId => {
+        io.to(targetSocketId).emit('message', data);
+      });
+    } else {
+      // Enviar de forma pública a toda la sala
+      io.to(data.room).emit('message', data);
+    }
   });
 
   socket.on('disconnect', () => {
-    const { username, room } = socket;
+    const room = socket.room;
     if (room && usersInRooms[room]) {
-      usersInRooms[room] = usersInRooms[room].filter(u => u !== username);
-      io.to(room).emit('roomUsers', usersInRooms[room]);
+      usersInRooms[room] = usersInRooms[room].filter(u => u.id !== socket.id);
+      io.to(room).emit('roomUsers', {
+        users: usersInRooms[room]
+      });
     }
   });
 });
 
-const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => {
-  console.log(`Servidor activo en el puerto ${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Servidor activo en el puerto ${PORT}`));

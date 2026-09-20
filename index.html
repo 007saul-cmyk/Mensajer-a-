@@ -3,12 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Mensajería en Tiempo Real</title>
+  <title>Mensajería Multicanal y Privada</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
-    /* Prevenir scroll no deseado en dispositivos móviles */
     body {
       height: 100dvh;
       overflow: hidden;
@@ -31,7 +30,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans flex flex-col h-full">
 
-  <!-- MODAL DE INGRESO (SALA Y USUARIO) -->
+  <!-- MODAL DE INGRESO -->
   <div id="login-modal" class="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl space-y-4">
       <div class="text-center">
@@ -39,7 +38,7 @@
           <i class="fa-solid fa-comments text-2xl text-white"></i>
         </div>
         <h2 class="text-xl font-bold text-slate-100">Iniciar Chat</h2>
-        <p class="text-xs text-slate-400 mt-1">Ingresa tu nombre y el código de sala para conectar celular a celular</p>
+        <p class="text-xs text-slate-400 mt-1">Ingresa tu apodo y el código de sala principal</p>
       </div>
 
       <div class="space-y-3">
@@ -60,7 +59,7 @@
   </div>
 
   <!-- HEADER -->
-  <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0">
+  <header class="bg-slate-900/90 border-b border-slate-800 px-4 py-3 flex items-center justify-between shrink-0 relative">
     <div class="flex items-center gap-3">
       <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center font-bold text-white shadow-md shadow-blue-500/20">
         <i class="fa-solid fa-user text-sm"></i>
@@ -72,17 +71,62 @@
         </p>
       </div>
     </div>
-    <button onclick="leaveRoom()" class="text-xs text-slate-400 hover:text-red-400 px-2 py-1 rounded-lg border border-slate-800">
-      <i class="fa-solid fa-right-from-bracket mr-1"></i> Salir
-    </button>
+
+    <div class="flex items-center gap-2">
+      <!-- BOTÓN USUARIOS EN LÍNEA -->
+      <button onclick="toggleUsersModal()" class="text-xs text-slate-400 hover:text-slate-200 p-2 rounded-lg border border-slate-800 bg-slate-900 relative" title="Usuarios conectados">
+        <i class="fa-solid fa-users"></i>
+        <span id="user-count" class="absolute -top-1 -right-1 bg-emerald-500 text-slate-950 text-[10px] font-bold px-1.5 py-0.2 rounded-full">0</span>
+      </button>
+
+      <!-- MENÚ DE CONFIGURACIÓN -->
+      <div class="relative">
+        <button onclick="toggleSettingsMenu()" class="text-xs text-slate-400 hover:text-slate-200 p-2 rounded-lg border border-slate-800 bg-slate-900 focus:outline-none" title="Ajustes">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+
+        <div id="settings-menu" class="hidden absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-800 rounded-xl shadow-xl p-3 z-50 text-xs space-y-3">
+          <div>
+            <p class="font-semibold text-slate-300 mb-1">Almacenamiento</p>
+            <button onclick="clearChatHistory()" class="w-full text-left text-red-400 hover:text-red-300 py-1 flex items-center gap-2">
+              <i class="fa-solid fa-trash"></i> Borrar historial de chat
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <button onclick="leaveRoom()" class="text-xs text-slate-400 hover:text-red-400 px-2.5 py-1.5 rounded-lg border border-slate-800">
+        <i class="fa-solid fa-right-from-bracket mr-1"></i> Salir
+      </button>
+    </div>
   </header>
+
+  <!-- PANEL DESPLEGABLE DE USUARIOS CONECTADOS (Selección para mensajes directos o grupos) -->
+  <div id="users-panel" class="hidden bg-slate-900/95 border-b border-slate-800 p-3 text-xs z-40 shadow-lg space-y-2">
+    <div class="flex justify-between items-center">
+      <p class="font-bold text-slate-300">Selecciona destinatarios:</p>
+      <button onclick="resetAudienceToAll()" class="text-[10px] text-blue-400 hover:underline">Enviar a Todos (Público)</button>
+    </div>
+    
+    <div id="users-list" class="space-y-1.5 max-h-36 overflow-y-auto">
+      <!-- Se puebla dinámicamente con checkboxes -->
+    </div>
+  </div>
+
+  <!-- BARRA DE DESTINATARIO ACTUAL -->
+  <div class="bg-slate-900/50 px-4 py-1.5 border-b border-slate-800/80 text-[11px] flex justify-between items-center">
+    <span class="text-slate-400">Modo de envío:</span>
+    <span id="target-audience-badge" class="font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-full">
+      <i class="fa-solid fa-globe mr-1"></i> Toda la Sala
+    </span>
+  </div>
 
   <!-- ÁREA DE MENSAJES -->
   <main class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-950" id="messages-container">
-    <!-- Los mensajes dinámicos aparecerán aquí -->
+    <!-- Mensajes en vivo -->
   </main>
 
-  <!-- PREVISUALIZADOR DE ARCHIVOS -->
+  <!-- PREVISUALIZADOR DE ARCHIVOS ADJUNTOS -->
   <div id="media-preview" class="hidden px-4 py-2 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
     <div class="flex items-center gap-3" id="preview-content"></div>
     <button onclick="clearPreview()" class="text-slate-400 hover:text-red-400 text-sm p-1">
@@ -90,7 +134,7 @@
     </button>
   </div>
 
-  <!-- BARRA DE GRABACIÓN DE VOZ -->
+  <!-- BARRA DE GRABACIÓN DE AUDIO -->
   <div id="recording-bar" class="hidden px-4 py-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
     <div class="flex items-center gap-3">
       <span class="w-3 h-3 rounded-full bg-red-500 rec-active"></span>
@@ -105,7 +149,7 @@
     </div>
   </div>
 
-  <!-- INPUT PRINCIPAL -->
+  <!-- BARRA DE ENTRADA Y ACCIONES -->
   <footer id="input-bar" class="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2 shrink-0">
     <input type="file" id="file-input" class="hidden" accept="image/*,video/*,audio/*" onchange="handleFileSelect(event)">
     <button onclick="document.getElementById('file-input').click()" class="p-2.5 text-slate-400 hover:text-blue-400 rounded-full">
@@ -124,7 +168,6 @@
   </footer>
 
   <script>
-    // CAMBIA ESTA URL POR LA IP O DOMINIO DE TU SERVIDOR EN LA NUBE (ej. Render, Railway)
     const SERVER_URL = "https://mensajer-a.onrender.com"; 
     
     let socket;
@@ -136,20 +179,34 @@
     let audioChunks = [];
     let recordingTimer = null;
     let secondsRecorded = 0;
+    
+    // Lista de IDs de sockets seleccionados para enviar mensaje privado o grupo
+    let selectedTargets = [];
+
+    if ("Notification" in window && Notification.permission !== "granted") {
+      Notification.requestPermission();
+    }
+
+    function toggleSettingsMenu() {
+      document.getElementById('settings-menu').classList.toggle('hidden');
+    }
+
+    function toggleUsersModal() {
+      document.getElementById('users-panel').classList.toggle('hidden');
+    }
 
     function joinRoom() {
       const user = document.getElementById('username-input').value.trim();
       const room = document.getElementById('room-input').value.trim();
 
       if (!user || !room) {
-        alert("Ingresa un usuario y un código de sala.");
+        alert("Ingresa un usuario y código de sala.");
         return;
       }
 
       currentUser = user;
       currentRoom = room;
 
-      // Conexión Socket.io
       socket = io(SERVER_URL);
 
       socket.on('connect', () => {
@@ -157,12 +214,103 @@
         document.getElementById('login-modal').classList.add('hidden');
         document.getElementById('display-room').innerText = `Sala: ${currentRoom}`;
         document.getElementById('display-user').innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> ${currentUser}`;
+        
+        loadSavedMessages();
       });
 
-      // Recibir Mensajes en tiempo real
       socket.on('message', (data) => {
         appendMessage(data);
+        saveMessageToLocal(data);
+
+        if (document.hidden && data.sender !== currentUser) {
+          showNotification(data);
+        }
       });
+
+      socket.on('roomUsers', ({ users }) => {
+        updateUsersList(users);
+      });
+    }
+
+    function updateUsersList(users) {
+      const list = document.getElementById('users-list');
+      const count = document.getElementById('user-count');
+      
+      // Filtrar al usuario actual de la lista seleccionable
+      const otherUsers = users.filter(u => u.username !== currentUser);
+      count.innerText = users.length;
+
+      if (otherUsers.length === 0) {
+        list.innerHTML = `<p class="text-slate-500 text-[11px]">No hay otros usuarios en línea.</p>`;
+        return;
+      }
+
+      list.innerHTML = otherUsers.map(u => `
+        <label class="flex items-center justify-between bg-slate-800/60 p-1.5 rounded-lg border border-slate-700/40 cursor-pointer hover:bg-slate-800">
+          <span class="flex items-center gap-2 text-slate-200">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            ${u.username}
+          </span>
+          <input type="checkbox" value="${u.id}" data-name="${u.username}" onchange="handleTargetSelection()" class="user-checkbox rounded border-slate-700 text-blue-600 bg-slate-900">
+        </label>
+      `).join('');
+    }
+
+    function handleTargetSelection() {
+      const checkboxes = document.querySelectorAll('.user-checkbox:checked');
+      selectedTargets = Array.from(checkboxes).map(cb => cb.value);
+      const targetNames = Array.from(checkboxes).map(cb => cb.getAttribute('data-name'));
+
+      const badge = document.getElementById('target-audience-badge');
+
+      if (selectedTargets.length === 0) {
+        badge.className = "font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-full";
+        badge.innerHTML = `<i class="fa-solid fa-globe mr-1"></i> Toda la Sala`;
+      } else if (selectedTargets.length === 1) {
+        badge.className = "font-semibold text-purple-400 bg-purple-950/60 border border-purple-800/50 px-2 py-0.5 rounded-full";
+        badge.innerHTML = `<i class="fa-solid fa-lock mr-1"></i> Privado con: ${targetNames[0]}`;
+      } else {
+        badge.className = "font-semibold text-amber-400 bg-amber-950/60 border border-amber-800/50 px-2 py-0.5 rounded-full";
+        badge.innerHTML = `<i class="fa-solid fa-user-group mr-1"></i> Subgrupo (${selectedTargets.length}): ${targetNames.join(', ')}`;
+      }
+    }
+
+    function resetAudienceToAll() {
+      document.querySelectorAll('.user-checkbox').forEach(cb => cb.checked = false);
+      handleTargetSelection();
+    }
+
+    function showNotification(data) {
+      if ("Notification" in window && Notification.permission === "granted") {
+        const bodyText = data.text ? data.text : (data.media ? '[Archivo/Audio]' : 'Nuevo mensaje');
+        new Notification(`Mensaje de ${data.sender}`, {
+          body: bodyText,
+          icon: 'https://cdn-icons-png.flaticon.com/512/134/134937.png'
+        });
+      }
+    }
+
+    function saveMessageToLocal(data) {
+      const key = `chat_history_${currentRoom}`;
+      const history = JSON.parse(localStorage.getItem(key) || "[]");
+      history.push(data);
+      localStorage.setItem(key, JSON.stringify(history));
+    }
+
+    function loadSavedMessages() {
+      const key = `chat_history_${currentRoom}`;
+      const history = JSON.parse(localStorage.getItem(key) || "[]");
+      document.getElementById('messages-container').innerHTML = '';
+      history.forEach(data => appendMessage(data));
+    }
+
+    function clearChatHistory() {
+      if (confirm("¿Seguro que deseas borrar el historial de esta sala localmente?")) {
+        const key = `chat_history_${currentRoom}`;
+        localStorage.removeItem(key);
+        document.getElementById('messages-container').innerHTML = '';
+        toggleSettingsMenu();
+      }
     }
 
     function leaveRoom() {
@@ -181,7 +329,7 @@
 
       const reader = new FileReader();
       reader.onload = function(evt) {
-        selectedFile = evt.target.result; // Convierte a Base64
+        selectedFile = evt.target.result;
         if (file.type.startsWith('image/')) selectedFileType = 'image';
         else if (file.type.startsWith('video/')) selectedFileType = 'video';
         else if (file.type.startsWith('audio/')) selectedFileType = 'audio';
@@ -214,6 +362,7 @@
         text: text,
         media: selectedFile,
         mediaType: selectedFileType,
+        targets: selectedTargets, // Array con los socket.id destinatarios o vacío si es público
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
 
@@ -236,13 +385,22 @@
         else if (data.mediaType === 'audio') mediaHTML = `<audio src="${data.media}" controls class="mb-2 w-full"></audio>`;
       }
 
+      // Etiqueta indicadora según privacidad
+      let scopeBadge = '';
+      if (data.targets && data.targets.length === 1) {
+        scopeBadge = `<span class="text-[9px] font-bold text-purple-300 bg-purple-900/60 px-1.5 py-0.5 rounded mb-1 inline-block"><i class="fa-solid fa-lock text-[8px] mr-0.5"></i> Privado</span>`;
+      } else if (data.targets && data.targets.length > 1) {
+        scopeBadge = `<span class="text-[9px] font-bold text-amber-300 bg-amber-900/60 px-1.5 py-0.5 rounded mb-1 inline-block"><i class="fa-solid fa-user-group text-[8px] mr-0.5"></i> Subgrupo</span>`;
+      }
+
       const bubbleColor = isSelf ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-100 border border-slate-700/50';
 
       wrapper.innerHTML = `
         <span class="text-[10px] text-slate-400 mb-1 px-1">${data.sender}</span>
-        <div class="${bubbleColor} p-3 rounded-2xl ${isSelf ? 'rounded-tr-none' : 'rounded-tl-none'} shadow-md">
+        <div class="${bubbleColor} p-3 rounded-2xl ${isSelf ? 'rounded-tr-none' : 'rounded-tl-none'} shadow-md w-full">
+          ${scopeBadge}
           ${mediaHTML}
-          ${data.text ? `<p class="text-sm">${data.text}</p>` : ''}
+          ${data.text ? `<p class="text-sm message-text leading-relaxed">${data.text}</p>` : ''}
         </div>
         <span class="text-[10px] text-slate-500 mt-1 px-1">${data.time}</span>
       `;
@@ -251,7 +409,7 @@
       container.scrollTop = container.scrollHeight;
     }
 
-    // GRABACIÓN DE NOTAS DE VOZ
+    // AUDIOS DE VOZ
     async function startRecording() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -296,6 +454,7 @@
             text: '',
             media: reader.result,
             mediaType: 'audio',
+            targets: selectedTargets,
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
           });
         };
